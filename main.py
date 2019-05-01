@@ -29,7 +29,7 @@ class K_Means():
 
     def fit(self, X, return_details=False, plot=False):
         self.X = X
-        self.assignment = np.zeros(self.number_data, dtype=np.int8)
+        self.assignment = np.zeros(self.number_data)
         # initialize clusters
         self.centroids = np.zeros((0, self.data_dimension))
         if self.initialization == 'uniform':
@@ -46,7 +46,7 @@ class K_Means():
         # iterate k-means until convergence
         has_converged = False
         steps_for_convergence = -1
-        for i in range(100):
+        for i in range(10000):
             old_assignment = self.assignment.copy()
             for j, point in enumerate(self.X):
                 self.assignment[j] = self.closest_centroid(point, return_centroid_index=True)
@@ -61,7 +61,7 @@ class K_Means():
         if return_details:
             return has_converged, steps_for_convergence
 
-    def mean_squared_centroid_distance(self):
+    def mean_centroid_distance(self):
         assert self.fitted
         centroid_matrix = np.array([self.centroids[c] for c in self.assignment])
         assert centroid_matrix.shape == self.X.shape
@@ -72,7 +72,7 @@ class K_Means():
             :returns an array of cluster indices as long as X2.'''
         assert self.fitted
         assert X2.shape[1] == self.data_dimension
-        X2_assignment = np.zeros(len(X2), dtype=np.int8)
+        X2_assignment = np.zeros(len(X2))
         for i, point in enumerate(X2):
             X2_assignment[i] = self.closest_centroid(point, return_centroid_index=True)
         return X2_assignment
@@ -139,57 +139,22 @@ def find_best_fitting_labelling(assignments, labels, return_loss=True):
     best_permut = all_permuts[best_idx]
     best_matching_dict = {key: val for key, val in zip(assignment_vals, best_permut)}
     if return_loss:
-        return best_matching_dict, best_loss / len(assignments)
+        return best_matching_dict, best_loss
     else:
         return best_matching_dict
 
 ###############################################################
 
-
-def test_kmeans():
-    y = np.random.randint(0,3,size=200)
-    X = np.concatenate((np.random.randn(100,2), 2 + 0.5*np.random.randn(100,2)) )
-    kmeans = K_Means(k=3, initialization='by_distance')
-    has_converged, steps_for_convergence = kmeans.fit(X, return_details=True)
-    assignment = kmeans.assignment
-    _, loss = find_best_fitting_labelling(assignment, y)
-    c_dist = kmeans.mean_squared_centroid_distance()
-    print("\nnext round.")
-    print("cluster dist: " + str(c_dist))
-    print("clf loss: " + str(loss))
-    print("number steps: " + str(steps_for_convergence))
-    plt.close()
-    fg = plt.figure()
-    plt.scatter(kmeans.centroids[:, 0], kmeans.centroids[:, 1])
-    plt.scatter(X[:, 0], X[:, 1], c='k', alpha=0.3)
-
-def plot_kmeans(kmeans):
-    plt.close()
-    fg = plt.figure()
-    plt.scatter(kmeans.centroids[:, 0], kmeans.centroids[:, 1])
-    plt.scatter(kmeans.X[:, 0], kmeans.X[:, 1], c='k', alpha=0.3)
-
-###############################################################
-
 def main():
 
-    #test_kmeans()
-
     df_train, df_val = ld.load_iris_data()
-    # kmeans = K_Means(k=3,initialization='by_distance')
-    # has_converged, steps_for_convergence = kmeans.fit(df_train.X, return_details=True)
-    # assignment = kmeans.assignment
-    # assignment_val = kmeans.classify(df_val.X)
-    # _, loss     = find_best_fitting_labelling(assignment,     df_train.y)
-    # _, loss_val = find_best_fitting_labelling(assignment_val, df_val.y)
-    # c_dist = kmeans.mean_squared_centroid_distance()
-    # plot_kmeans(kmeans)
-
+    kmeans = K_Means(k=3,initialization='by_distance')
+    has_converged, steps_for_convergence = kmeans.fit(df_train.X, return_details=True)
+    print(kmeans.centroids)
 
     # run both methods a couple of times, get average steps for convergence and avg optimal loss for each
     # 1. Uniform init:
     n = 100
-    uniform_centroid_distances = np.zeros(n)
     uniform_losses = np.zeros(n)
     uniform_losses_val = np.zeros(n)
     uniform_steps = np.zeros(n)
@@ -199,22 +164,14 @@ def main():
         has_converged, steps = kmeans.fit(df_train.X, return_details=True)
         uniform_has_not_converged[i] = not has_converged
         uniform_steps[i] = steps
-        if not has_converged:
-            uniform_losses[i] = 1. if len(uniform_losses) == 0 else max(uniform_losses)
-            uniform_losses_val[i] = 1. if len(uniform_losses_val) == 0 else max(uniform_losses_val)
-        else:
-            assignment = kmeans.assignment
-            assignment_val = kmeans.classify(df_val.X)
-            try:
-                _, uniform_losses[i]     = find_best_fitting_labelling(assignment,     df_train.y)
-                _, uniform_losses_val[i] = find_best_fitting_labelling(assignment_val, df_val.y)
-            except AssertionError as e:
-                raise e
-        uniform_centroid_distances[i] = kmeans.mean_squared_centroid_distance()
+        assignment = kmeans.assignment
+        assignment_val = kmeans.classify(df_val.X)
+        _, uniform_losses[i]     = find_best_fitting_labelling(assignment,     df_train.y)
+        _, uniform_losses_val[i] = find_best_fitting_labelling(assignment_val, df_val.y)
+
 
 
     # 2. k-means++:
-    plusplus_centroid_distances = np.zeros(n)
     plusplus_losses = np.zeros(n)
     plusplus_losses_val = np.zeros(n)
     plusplus_steps = np.zeros(n)
@@ -228,22 +185,21 @@ def main():
         assignment_val = kmeans.classify(df_val.X)
         _, plusplus_losses[i]     = find_best_fitting_labelling(assignment,     df_train.y)
         _, plusplus_losses_val[i] = find_best_fitting_labelling(assignment_val, df_val.y)
-        plusplus_centroid_distances[i] = kmeans.mean_squared_centroid_distance()
 
     # Comparison between both methods:
     print("\nmean number of convergence steps:")
-    print("Uniform initialization: "+ str(np.mean(uniform_steps)))
+    print("Uniform initialization: \t"+ str(np.mean(uniform_steps)))
     print("k-means++: \t"+ str(np.mean(plusplus_steps)))
     print("\nNumber of times not converged: ")
-    print("Uniform initialization:"+ str(np.sum(uniform_has_not_converged)) + " / "+str(n))
-    print("k-means++: \t"+ str(np.sum(plusplus_has_not_converged))  + " / "+str(n))
+    print("Uniform initialization:\t"+ str(np.mean(uniform_has_not_converged)))
+    print("k-means++: \t"+ str(np.mean(plusplus_has_not_converged)))
     print("\nMean squared centroid distance after convergence:")
-    print("Uniform initialization: "+ str(np.mean(uniform_centroid_distances)) + " +-"+str(np.std(uniform_centroid_distances)))
-    print("k-means++: \t"+ str(np.mean(plusplus_centroid_distances)) + " +-"+str(np.std(plusplus_centroid_distances)))
+    print("Uniform initialization: \t"+ str(np.mean(uniform_steps)))
+    print("k-means++: \t"+ str(np.mean(plusplus_steps)))
     print("\n")
-    print("\nMean accuracy under best cluster assignment: ")
-    print("Uniform initialization: "+ str(1-np.mean(uniform_losses_val)) + "(train accur: "+str(1-np.mean(uniform_losses))+")")
-    print("k-means++: \t"+ str(1-np.mean(plusplus_losses_val)) + "(train accur: "+str(1-np.mean(plusplus_losses))+")")
+    print("\nAccuracy under best cluster assignment: ")
+    print("Uniform initialization: \t"+ str(np.mean(uniform_steps)))
+    print("k-means++: \t"+ str(np.mean(plusplus_steps)))
 
 
 
