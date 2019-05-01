@@ -20,7 +20,7 @@ def load_iris_data(seed=None, val_percent = 0.2):
                     Influences train-val split choice.
     '''
     #datafile = "/home/noobuntu/Repos/programming_task_mpg/data/iris/iris.data"
-    datafile = "../data/iris/iris.data"
+    datafile = "./data/iris/iris.data"
     X = np.zeros((150,4)) # X_list
     y = np.zeros(150, dtype=np.int8)
     label_dict = iris_labels()
